@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Mini Order System - Orders</title></head>
+<body>
+<h1>Orders</h1>
+<form method="post" action="/orders" id="create-order-form">
+<input name="product_name" placeholder="Product name" required />
+<input name="amount" type="number" min="0.01" step="0.01" placeholder="Amount" required />
+<button type="submit">Create Order</button>
+</form>
+<table id="orders-table" border="1">
+<thead><tr><th>ID</th><th>Product</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+<tbody>
+{% for order in orders %}
+<tr data-order-id="{{ order.id }}">
+<td>{{ order.id }}</td><td>{{ order.product_name }}</td><td>{{ order.amount }}</td><td class="status">{{ order.status }}</td>
+<td>{% if order.status == "paid" %}<form method="post" action="/orders/{{ order.id }}/refund"><button type="submit">Refund</button></form>{% else %}-{% endif %}</td>
+</tr>
+{% endfor %}
+</tbody></table>
+</body></html>
