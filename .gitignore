@@ -6,3 +6,4 @@ playwright-report/
 test-results/
 *.db
 .env
+.reports/
