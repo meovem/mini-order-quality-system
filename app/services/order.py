@@ -42,8 +42,8 @@ def refund_order(order_id: int):
         raise LookupError("order not found")
     if order["status"] == "shipped":
         raise ValueError("shipped order cannot be refunded")
-    if order["status"] == "refunded":
-        raise ValueError("order already refunded")
+    # if order["status"] == "refunded":
+    #     raise ValueError("order already refunded")
     with get_conn() as conn:
         conn.execute("UPDATE orders SET status = 'refunded' WHERE id = ?", (order_id,))
     return get_order(order_id)
