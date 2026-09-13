@@ -6,7 +6,8 @@ on:
     branches: [main]
 
 jobs:
-  smoke:
+  pr-smoke:
+    name: pr-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
