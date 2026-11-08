@@ -34,3 +34,76 @@ jobs:
         with:
           name: smoke-test-report
           path: reports/
+      - name: Notify Feishu
+        if: always()
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+          JOB_STATUS: ${{ job.status }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          python - <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          import time
+          import urllib.request
+
+          webhook = os.environ["FEISHU_WEBHOOK"]
+          secret = os.environ["FEISHU_SECRET"]
+          if not webhook or not secret:
+              raise RuntimeError("缺少飞书机器人 Secret")
+
+          timestamp = str(int(time.time()))
+          key = f"{timestamp}\n{secret}".encode()
+          sign = base64.b64encode(
+              hmac.new(key, b"", hashlib.sha256).digest()
+          ).decode()
+
+          status = os.environ["JOB_STATUS"]
+          result = {
+              "success": "✅ 成功",
+              "failure": "❌ 失败",
+              "cancelled": "⚪ 已取消",
+          }.get(status, status)
+
+          run_url = (
+              f'{os.environ["GITHUB_SERVER_URL"]}/'
+              f'{os.environ["GITHUB_REPOSITORY"]}/actions/runs/'
+              f'{os.environ["GITHUB_RUN_ID"]}'
+          )
+          pr_number = os.environ.get("PR_NUMBER", "")
+          pr_line = f"PR：#{pr_number}\n" if pr_number else ""
+
+          text = (
+              f"PR Smoke Tests：{result}\n"
+              f'项目：{os.environ["GITHUB_REPOSITORY"]}\n'
+              f"{pr_line}"
+              f'分支：{os.environ["SOURCE_BRANCH"]}\n'
+              f"运行详情与报告下载：{run_url}"
+          )
+
+          payload = {
+              "timestamp": timestamp,
+              "sign": sign,
+              "msg_type": "text",
+              "content": {"text": text},
+          }
+          request = urllib.request.Request(
+              webhook,
+              data=json.dumps(payload).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              response_data = json.load(response)
+
+          if response_data.get("code") != 0:
+              raise RuntimeError(
+                  f'飞书通知失败，错误码：{response_data.get("code")}'
+              )
+          print("飞书通知发送成功")
+          PY
