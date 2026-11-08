@@ -33,3 +33,71 @@ jobs:
         with:
           name: regression-test-report
           path: reports/
+      - name: Notify Feishu
+        if: always()
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
+          FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          import time
+          import urllib.request
+
+          webhook = os.environ["FEISHU_WEBHOOK"]
+          secret = os.environ["FEISHU_SECRET"]
+          if not webhook or not secret:
+              raise RuntimeError("缺少飞书机器人 Secret")
+
+          timestamp = str(int(time.time()))
+          key = f"{timestamp}\n{secret}".encode()
+          sign = base64.b64encode(
+              hmac.new(key, b"", hashlib.sha256).digest()
+          ).decode()
+
+          status = os.environ["JOB_STATUS"]
+          result = {
+              "success": "✅ 成功",
+              "failure": "❌ 失败",
+              "cancelled": "⚪ 已取消",
+          }.get(status, status)
+
+          run_url = (
+              f'{os.environ["GITHUB_SERVER_URL"]}/'
+              f'{os.environ["GITHUB_REPOSITORY"]}/actions/runs/'
+              f'{os.environ["GITHUB_RUN_ID"]}'
+          )
+          text = (
+              f"Nightly Regression：{result}\n"
+              f'项目：{os.environ["GITHUB_REPOSITORY"]}\n'
+              f'分支：{os.environ["GITHUB_REF_NAME"]}\n'
+              f'提交：{os.environ["GITHUB_SHA"][:7]}\n'
+              f"运行详情与报告下载：{run_url}"
+          )
+
+          payload = {
+              "timestamp": timestamp,
+              "sign": sign,
+              "msg_type": "text",
+              "content": {"text": text},
+          }
+          request = urllib.request.Request(
+              webhook,
+              data=json.dumps(payload).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          with urllib.request.urlopen(request, timeout=20) as response:
+              result = json.load(response)
+
+          if result.get("code") != 0:
+              raise RuntimeError(
+                  f'飞书通知失败，错误码：{result.get("code")}'
+              )
+          print("飞书通知发送成功")
+          PY
